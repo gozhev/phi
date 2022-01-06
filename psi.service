@@ -1,0 +1,17 @@
+[Unit]
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=%h
+StartLimitIntervalSec=0
+
+[Service]
+Environment=
+Restart=always
+RestartSec=60
+TimeoutStopSec=10
+WorkingDirectory=/usr/share/psi
+ExecStart=/usr/bin/psi
+Type=simple
+
+[Install]
+WantedBy=multi-user.target default.target
