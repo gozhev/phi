@@ -1,5 +1,3 @@
-var server = "http://home.gozhev.ru:50000/janus";
-var token = "123456";
 var janus = null;
 var streaming = null;
 var opaqueId = "streamingtest-"+Janus.randomString(12);

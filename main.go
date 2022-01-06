@@ -2,8 +2,10 @@ package main
 
 import (
 	"github.com/bradfitz/gomemcache/memcache"
+//	"encoding/json"
 	"io/ioutil"
     "fmt"
+    "bytes"
     "net/http"
     "strings"
     "text/template"
@@ -28,6 +30,20 @@ func CheckToken(token string) bool {
 	return token == string(cached_token.Value)
 }
 
+func JanusTokenAdd(token string) {
+	req := []byte("{\"janus\":\"add_token\",\"token\":\"" + token + "\",\"transaction\":\"1\",\"admin_secret\":\"janusoverlord\",\"plugins\":[\"janus.plugin.streaming\"]}");
+
+	_, err := http.Post("http://localhost:7088/admin", "application/json",
+        bytes.NewBuffer(req))
+
+	if err != nil {
+		fmt.Println(err)
+		return;
+	}
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//fmt.Println(string(body))
+}
+
 func HandleRequest(w http.ResponseWriter, req *http.Request) {
 	url := req.URL.Path[1:]
 	index := strings.IndexByte(url, '/') 
@@ -44,6 +60,8 @@ func HandleRequest(w http.ResponseWriter, req *http.Request) {
 	url = url[index:]
 
 	if len(url) <= 1 {
+		JanusTokenAdd(token)
+
 		w.Header().Add("Content Type", "text/html")
 
 		templates := template.New("template")
