@@ -18,7 +18,6 @@ type Context struct {
     Fruit [3]string
 }
 
-var g_doc string
 var g_memc *memcache.Client
 
 func CheckToken(token string) bool {
@@ -33,7 +32,7 @@ func CheckToken(token string) bool {
 func JanusTokenAdd(token string) {
 	req := []byte("{\"janus\":\"add_token\",\"token\":\"" + token + "\",\"transaction\":\"1\",\"admin_secret\":\"janusoverlord\",\"plugins\":[\"janus.plugin.streaming\"]}");
 
-	_, err := http.Post("http://localhost:7088/admin", "application/json",
+	_, err := http.Post("http://localhost:51101/admin", "application/json",
         bytes.NewBuffer(req))
 
 	if err != nil {
@@ -64,8 +63,16 @@ func HandleRequest(w http.ResponseWriter, req *http.Request) {
 
 		w.Header().Add("Content Type", "text/html")
 
+
+		data, err := ioutil.ReadFile("data/template/template.html")
+		doc := string(data)
+		if (err != nil) {
+			fmt.Println(err)
+		}
+
+
 		templates := template.New("template")
-		templates.New("doc").Parse(g_doc)
+		templates.New("doc").Parse(doc)
 		context := Context{
 			Token: token,
 		}
@@ -73,30 +80,27 @@ func HandleRequest(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(url, "/script/") {
-		filename := "data" + url
-		data, err := ioutil.ReadFile(filename)
-		if err != nil {
-			fmt.Println(err) 
-		} else {
-			w.Write(data)
+	filename := "data" + url
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Println(err) 
+	} else {
+		if (strings.HasSuffix(filename, ".css")) {
+			w.Header().Set("Content-Type", "text/css")
+		} else if (strings.HasSuffix(filename, ".js")) {
+			w.Header().Set("Content-Type", "text/javascript")
 		}
+		w.Write(data)
 	}
 }
 
 
 func main() {
-	data, err := ioutil.ReadFile("data/template/template.html")
-	g_doc = string(data)
-	if (err != nil) {
-		fmt.Println(err)
-	}
-
 	g_memc = memcache.New("127.0.0.1:11211")
 
 	fmt.Println("running")
     http.HandleFunc("/", HandleRequest)
-    http.ListenAndServe(":50001", nil)
+    http.ListenAndServe(":51000", nil)
 }
 
 // vim:set ts=4 sw=4 noet:

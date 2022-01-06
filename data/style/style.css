@@ -1,3 +1,50 @@
+html, body {
+	height: 100%;
+}
+
 body {
-	background-color: lightgrey;
+	font-size: 1em;
+	background-color: black;
+	color: grey;
+	font-family: sans-serif;
+
+	margin: 0;
+	padding: 0;
+
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+#container {
+	width: 100vw;
+	height: 100vh;
+
+	display: flex;
+	flex-direction: column;
+}
+
+#stream  {
+	margin: 0;
+	padding: 0;
+	flex-grow: 1;
+	position: relative;
+}
+
+#statusbar {
+	flex-grow: 0;
+	display: flex;
+	flex-direction: row;
+}
+
+#statusbar div {
+	padding: 0 10px;
+}
+
+#remotevideo {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	height: 100%;
+	position: absolute;
 }

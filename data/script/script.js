@@ -1,10 +1,7 @@
 var janus = null;
 var streaming = null;
-var opaqueId = "streamingtest-"+Janus.randomString(12);
 var bitrateTimer = null;
-var spinner = null;
-var simulcastStarted = false, svcStarted = false;
-
+var opaqueId = "streamingtest-" + Janus.randomString(12);
 var selectedStream = 1;
 
 $(document).ready(function() {
@@ -12,6 +9,7 @@ $(document).ready(function() {
 });
 
 function OnDocumentReady() {
+  SetupUiInteractions();
 	Janus.init({callback: OnJanusInit, debug: "all"});
 }
 
@@ -24,6 +22,34 @@ function StopSession() {
 	janus.destroy();
 }
 
+function SetupUiInteractions() {
+	var elem = document.getElementById("container");
+	elem.ondblclick = function() {
+		if (!document.fullscreenElement && !document.mozFullScreenElement &&
+				!document.webkitFullscreenElement && !document.msFullscreenElement) {
+			if (elem.requestFullscreen) {
+				elem.requestFullscreen({ navigationUI: "hide" });
+			} else if (elem.msRequestFullscreen) {
+				elem.msRequestFullscreen();
+			} else if (elem.mozRequestFullScreen) {
+				elem.mozRequestFullScreen();
+			} else if (elem.webkitRequestFullscreen) {
+				elem.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+			}
+		} else {
+			if (document.exitFullscreen) {
+				document.exitFullscreen();
+			} else if (document.msExitFullscreen) {
+				document.msExitFullscreen();
+			} else if (document.mozCancelFullScreen) {
+				document.mozCancelFullScreen();
+			} else if (document.webkitExitFullscreen) {
+				document.webkitExitFullscreen();
+			}
+		}
+	};
+}
+
 function StartSession() {
 	if(!Janus.isWebrtcSupported()) {
 		alert("error: no webrtc support");
@@ -34,7 +60,6 @@ function StartSession() {
 		token: token,
 		server: server,
 		success: function() {
-
 			// attach to streaming plugin
 			janus.attach({
 				plugin: "janus.plugin.streaming",
@@ -61,47 +86,26 @@ function StartSession() {
 					Janus.log("Janus says our WebRTC PeerConnection is " + (on ? "up" : "down") + " now");
 				},
 				onmessage: function(msg, jsep) {
-					Janus.debug(" ::: Got a message :::", msg);
+					Janus.debug(" ::: got a message :::", msg);
 					var result = msg["result"];
-					if(result) {
-						if(result["status"]) {
+					if (result) {
+						if (result["status"]) {
 							var status = result["status"];
 							if(status === 'starting')
-								$('#status').removeClass('hide').text("Starting, please wait...").show();
+								$('#cur_status').text("starting").show();
 							else if(status === 'started')
-								$('#status').removeClass('hide').text("Started").show();
+								$('#cur_status').text("started").show();
 							else if(status === 'stopped')
 								stopStream();
 						} else if(msg["streaming"] === "event") {
-							// Is simulcast in place?
-							var substream = result["substream"];
-							var temporal = result["temporal"];
-							if((substream !== null && substream !== undefined) || (temporal !== null && temporal !== undefined)) {
-								if(!simulcastStarted) {
-									simulcastStarted = true;
-									addSimulcastButtons();
-								}
-								// We just received notice that there's been a switch, update the buttons
-								updateSimulcastButtons(substream, temporal);
-							}
-							// Is VP9/SVC in place?
-							var spatial = result["spatial_layer"];
-							temporal = result["temporal_layer"];
-							if((spatial !== null && spatial !== undefined) || (temporal !== null && temporal !== undefined)) {
-								if(!svcStarted) {
-									svcStarted = true;
-									addSvcButtons();
-								}
-								// We just received notice that there's been a switch, update the buttons
-								updateSvcButtons(spatial, temporal);
-							}
 						}
 					} else if(msg["error"]) {
 						alert(msg["error"]);
 						stopStream();
 						return;
 					}
-					if(jsep) {
+
+					if (jsep) {
 						Janus.debug("Handling SDP as well...", jsep);
 						var stereo = (jsep.sdp.indexOf("stereo=1") !== -1);
 						// Offer from the plugin, let's answer
@@ -128,49 +132,40 @@ function StartSession() {
 								}
 							});
 					}
+
 				},
 
 				onremotestream: function(stream) {
-					Janus.debug(" ::: Got a remote stream :::", stream);
-					var addButtons = false;
-					if($('#remotevideo').length === 0) {
-						addButtons = true;
-						$('#stream').append('<video class="rounded centered hide" id="remotevideo" width="100%" height="100%" playsinline/>');
-						$('#remotevideo').get(0).volume = 0;
-						// Show the stream and hide the spinner when we get a playing event
-						$("#remotevideo").bind("playing", function () {
-							$('#waitingvideo').remove();
-							if(this.videoWidth)
-								$('#remotevideo').removeClass('hide').show();
-							if(spinner)
-								spinner.stop();
-							spinner = null;
-							var videoTracks = stream.getVideoTracks();
-							if(!videoTracks || videoTracks.length === 0)
-								return;
-							var width = this.videoWidth;
-							var height = this.videoHeight;
-							$('#curres').removeClass('hide').text(width+'x'+height).show();
-							if(Janus.webRTCAdapter.browserDetails.browser === "firefox") {
-								// firefox stable has a bug: width and height are not immediately available after a playing
-								setTimeout(function() {
-									var width = $("#remotevideo").get(0).videoWidth;
-									var height = $("#remotevideo").get(0).videoHeight;
-									$('#curres').removeClass('hide').text(width+'x'+height).show();
-								}, 2000);
-							}
-						});
-					}
+					Janus.debug("::: got a remote stream :::", stream);
+
+
+					$("#remotevideo").bind("playing", function () {
+						$('#waitingvideo').remove();
+
+						var videoTracks = stream.getVideoTracks();
+						if(!videoTracks || videoTracks.length === 0)
+							return;
+						var width = this.videoWidth;
+						var height = this.videoHeight;
+						$('#cur_resolution').text(width+'x'+height).show();
+						if(Janus.webRTCAdapter.browserDetails.browser === "firefox") {
+							// firefox stable has a bug: width and height are not immediately available after a playing
+							setTimeout(function() {
+								var width = $("#remotevideo").get(0).videoWidth;
+								var height = $("#remotevideo").get(0).videoHeight;
+								$('#cur_resolution').text(width+'x'+height).show();
+							}, 2000);
+						}
+					});
 
 					Janus.attachMediaStream($('#remotevideo').get(0), stream);
-
 					$("#remotevideo").get(0).volume = 0;
 					$("#remotevideo").get(0).play();
 
 					var videoTracks = stream.getVideoTracks();
 					if(!videoTracks || videoTracks.length === 0) {
 						// No remote video
-						$('#remotevideo').hide();
+						//$('#remotevideo').hide();
 						if($('#stream .no-video-container').length === 0) {
 							$('#stream').append(
 								'<div class="no-video-container">' +
@@ -180,25 +175,23 @@ function StartSession() {
 						}
 					} else {
 						$('#stream .no-video-container').remove();
-						$('#remotevideo').removeClass('hide').show();
 					}
-					if(!addButtons)
-						return;
-					if(videoTracks && videoTracks.length &&
+
+					if (videoTracks && videoTracks.length &&
 							(Janus.webRTCAdapter.browserDetails.browser === "chrome" ||
 								Janus.webRTCAdapter.browserDetails.browser === "firefox" ||
 								Janus.webRTCAdapter.browserDetails.browser === "safari")) {
-						$('#curbitrate').removeClass('hide').show();
+
 						bitrateTimer = setInterval(function() {
-							// Display updated bitrate, if supported
 							var bitrate = streaming.getBitrate();
-							$('#curbitrate').text(bitrate);
-							// Check if the resolution changed too
+							$('#cur_bitrate').text(bitrate);
 							var width = $("#remotevideo").get(0).videoWidth;
 							var height = $("#remotevideo").get(0).videoHeight;
-							if(width > 0 && height > 0)
-								$('#curres').removeClass('hide').text(width+'x'+height).show();
-						}, 1000);
+							if (width > 0 && height > 0) {
+								$('#cur_resolution').text(width+'x'+height).show();
+							}
+						}, 200);
+
 					}
 				},
 
@@ -208,9 +201,6 @@ function StartSession() {
 					$('#stream').append(
 						'<input class="form-control" type="text" id="datarecv" disabled></input>'
 					);
-					if(spinner)
-						spinner.stop();
-					spinner = null;
 				},
 
 				ondata: function(data) {
@@ -221,20 +211,16 @@ function StartSession() {
 				oncleanup: function() {
 					Janus.log(" ::: Got a cleanup notification :::");
 					$('#waitingvideo').remove();
-					$('#remotevideo').remove();
+					//$('#remotevideo').remove();
 					$('#datarecv').remove();
 					$('.no-video-container').remove();
 					$('#bitrate').attr('disabled', true);
 					$('#bitrateset').html('Bandwidth<span class="caret"></span>');
-					$('#curbitrate').hide();
 					if(bitrateTimer)
 						clearInterval(bitrateTimer);
 					bitrateTimer = null;
-					$('#curres').hide();
-					$('#simulcast').remove();
 					$('#metadata').empty();
 					$('#info').addClass('hide').hide();
-					simulcastStarted = false;
 				}
 
 			});
@@ -242,11 +228,11 @@ function StartSession() {
 		error: function(error) {
 			Janus.error(error);
 			alert(error, function() {
-				window.location.reload();
+				//window.location.reload();
 			});
 		},
 		destroyed: function() {
-			window.location.reload();
+			//window.location.reload();
 		}
 	});
 }
@@ -262,278 +248,55 @@ function startStream() {
 	streaming.send({ message: body });
 	// no remote video yet
 	$('#stream').append('<video class="rounded centered" id="waitingvideo" width="100%" height="100%" />');
-	if(spinner == null) {
-		var target = document.getElementById('stream');
-		spinner = new Spinner({top:100}).spin(target);
-	} else {
-		spinner.spin();
-	}
 
 	// get some more info for the mountpoint to display, if any
 	getStreamInfo();
 }
 
 function stopStream() {
-	$('#watch').attr('disabled', true).unbind('click');
 	var body = { request: "stop" };
 	streaming.send({ message: body });
 	streaming.hangup();
-	$('#streamset').removeAttr('disabled');
-	$('#streamslist').removeAttr('disabled');
-	$('#status').empty().hide();
-	$('#bitrate').attr('disabled', true);
-	$('#bitrateset').html('Bandwidth<span class="caret"></span>');
-	$('#curbitrate').hide();
-	if(bitrateTimer)
+	//$('#cur_status').empty();
+	//$('#cur_bitrate').empty();
+	//$('#cur_resolution').empty();
+	if (bitrateTimer) {
 		clearInterval(bitrateTimer);
+	}
 	bitrateTimer = null;
-	$('#curres').empty().hide();
-	$('#simulcast').remove();
-	simulcastStarted = false;
 }
 
 function getStreamInfo() {
 	$('#metadata').empty();
-	$('#info').addClass('hide').hide();
-	if(!selectedStream)
+
+	if (!selectedStream) {
 		return;
-	// Send a request for more info on the mountpoint we subscribed to
-	var body = { request: "info", id: parseInt(selectedStream) || selectedStream };
-	streaming.send({ message: body, success: function(result) {
-		if(result && result.info && result.info.metadata) {
-			$('#metadata').html(escapeXmlTags(result.info.metadata));
-			$('#info').removeClass('hide').show();
+	}
+
+	// send a request for more info on the mountpoint we subscribed to
+	var body = {
+		request: "info",
+		id: parseInt(selectedStream) || selectedStream
+	};
+	streaming.send({
+		message: body,
+		success: function(result) {
+			if (result && result.info && result.info.metadata) {
+				$('#metadata').html(escapeXmlTags(result.info.metadata));
+				$('#info').removeClass('hide').show();
+			}
 		}
-	}});
+	});
 }
 
-// Helper to escape XML tags
+// helper to escape xml tags
 function escapeXmlTags(value) {
-	if(value) {
-		var escapedValue = value.replace(new RegExp('<', 'g'), '&lt');
-		escapedValue = escapedValue.replace(new RegExp('>', 'g'), '&gt');
-		return escapedValue;
-	}
-}
-
-// Helpers to create Simulcast-related UI, if enabled
-function addSimulcastButtons() {
-	$('#curres').parent().append(
-		'<div id="simulcast" class="btn-group-vertical btn-group-vertical-xs pull-right">' +
-		'	<div class"row">' +
-		'		<div class="btn-group btn-group-xs" style="width: 100%">' +
-		'			<button id="sl-2" type="button" class="btn btn-primary" data-toggle="tooltip" title="Switch to higher quality" style="width: 33%">SL 2</button>' +
-		'			<button id="sl-1" type="button" class="btn btn-primary" data-toggle="tooltip" title="Switch to normal quality" style="width: 33%">SL 1</button>' +
-		'			<button id="sl-0" type="button" class="btn btn-primary" data-toggle="tooltip" title="Switch to lower quality" style="width: 34%">SL 0</button>' +
-		'		</div>' +
-		'	</div>' +
-		'	<div class"row">' +
-		'		<div class="btn-group btn-group-xs hide" style="width: 100%">' +
-		'			<button id="tl-2" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 2" style="width: 34%">TL 2</button>' +
-		'			<button id="tl-1" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 1" style="width: 33%">TL 1</button>' +
-		'			<button id="tl-0" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 0" style="width: 33%">TL 0</button>' +
-		'		</div>' +
-		'	</div>' +
-		'</div>');
-	// Enable the simulcast selection buttons
-	$('#sl-0').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Switching simulcast substream, wait for it... (lower quality)", null, {timeOut: 2000});
-			if(!$('#sl-2').hasClass('btn-success'))
-				$('#sl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#sl-1').hasClass('btn-success'))
-				$('#sl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#sl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			streaming.send({ message: { request: "configure", substream: 0 }});
-		});
-	$('#sl-1').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Switching simulcast substream, wait for it... (normal quality)", null, {timeOut: 2000});
-			if(!$('#sl-2').hasClass('btn-success'))
-				$('#sl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#sl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			if(!$('#sl-0').hasClass('btn-success'))
-				$('#sl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", substream: 1 }});
-		});
-	$('#sl-2').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Switching simulcast substream, wait for it... (higher quality)", null, {timeOut: 2000});
-			$('#sl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			if(!$('#sl-1').hasClass('btn-success'))
-				$('#sl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#sl-0').hasClass('btn-success'))
-				$('#sl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", substream: 2 }});
-		});
-	$('#tl-0').parent().removeClass('hide');
-	$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping simulcast temporal layer, wait for it... (lowest FPS)", null, {timeOut: 2000});
-			if(!$('#tl-2').hasClass('btn-success'))
-				$('#tl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#tl-1').hasClass('btn-success'))
-				$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#tl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			streaming.send({ message: { request: "configure", temporal: 0 }});
-		});
-	$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping simulcast temporal layer, wait for it... (medium FPS)", null, {timeOut: 2000});
-			if(!$('#tl-2').hasClass('btn-success'))
-				$('#tl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-info');
-			if(!$('#tl-0').hasClass('btn-success'))
-				$('#tl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", temporal: 1 }});
-		});
-	$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping simulcast temporal layer, wait for it... (highest FPS)", null, {timeOut: 2000});
-			$('#tl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			if(!$('#tl-1').hasClass('btn-success'))
-				$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#tl-0').hasClass('btn-success'))
-				$('#tl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", temporal: 2 }});
-		});
-}
-
-function updateSimulcastButtons(substream, temporal) {
-	// Check the substream
-	if(substream === 0) {
-		toastr.success("Switched simulcast substream! (lower quality)", null, {timeOut: 2000});
-		$('#sl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#sl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#sl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-	} else if(substream === 1) {
-		toastr.success("Switched simulcast substream! (normal quality)", null, {timeOut: 2000});
-		$('#sl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#sl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#sl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	} else if(substream === 2) {
-		toastr.success("Switched simulcast substream! (higher quality)", null, {timeOut: 2000});
-		$('#sl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#sl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#sl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	}
-	// Check the temporal layer
-	if(temporal === 0) {
-		toastr.success("Capped simulcast temporal layer! (lowest FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-	} else if(temporal === 1) {
-		toastr.success("Capped simulcast temporal layer! (medium FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	} else if(temporal === 2) {
-		toastr.success("Capped simulcast temporal layer! (highest FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	}
-}
-
-// Helpers to create SVC-related UI for a new viewer
-function addSvcButtons() {
-	if($('#svc').length > 0)
+	if(!value) {
 		return;
-	$('#curres').parent().append(
-		'<div id="svc" class="btn-group-vertical btn-group-vertical-xs pull-right">' +
-		'	<div class"row">' +
-		'		<div class="btn-group btn-group-xs" style="width: 100%">' +
-		'			<button id="sl-1" type="button" class="btn btn-primary" data-toggle="tooltip" title="Switch to normal resolution" style="width: 50%">SL 1</button>' +
-		'			<button id="sl-0" type="button" class="btn btn-primary" data-toggle="tooltip" title="Switch to low resolution" style="width: 50%">SL 0</button>' +
-		'		</div>' +
-		'	</div>' +
-		'	<div class"row">' +
-		'		<div class="btn-group btn-group-xs" style="width: 100%">' +
-		'			<button id="tl-2" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 2 (high FPS)" style="width: 34%">TL 2</button>' +
-		'			<button id="tl-1" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 1 (medium FPS)" style="width: 33%">TL 1</button>' +
-		'			<button id="tl-0" type="button" class="btn btn-primary" data-toggle="tooltip" title="Cap to temporal layer 0 (low FPS)" style="width: 33%">TL 0</button>' +
-		'		</div>' +
-		'	</div>' +
-		'</div>'
-	);
-	// Enable the SVC selection buttons
-	$('#sl-0').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Switching SVC spatial layer, wait for it... (low resolution)", null, {timeOut: 2000});
-			if(!$('#sl-1').hasClass('btn-success'))
-				$('#sl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#sl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			streaming.send({ message: { request: "configure", spatial_layer: 0 }});
-		});
-	$('#sl-1').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Switching SVC spatial layer, wait for it... (normal resolution)", null, {timeOut: 2000});
-			$('#sl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			if(!$('#sl-0').hasClass('btn-success'))
-				$('#sl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", spatial_layer: 1 }});
-		});
-	$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping SVC temporal layer, wait for it... (lowest FPS)", null, {timeOut: 2000});
-			if(!$('#tl-2').hasClass('btn-success'))
-				$('#tl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#tl-1').hasClass('btn-success'))
-				$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#tl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			streaming.send({ message: { request: "configure", temporal_layer: 0 }});
-		});
-	$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping SVC temporal layer, wait for it... (medium FPS)", null, {timeOut: 2000});
-			if(!$('#tl-2').hasClass('btn-success'))
-				$('#tl-2').removeClass('btn-primary btn-info').addClass('btn-primary');
-			$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-info');
-			if(!$('#tl-0').hasClass('btn-success'))
-				$('#tl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", temporal_layer: 1 }});
-		});
-	$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary')
-		.unbind('click').click(function() {
-			toastr.info("Capping SVC temporal layer, wait for it... (highest FPS)", null, {timeOut: 2000});
-			$('#tl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-info');
-			if(!$('#tl-1').hasClass('btn-success'))
-				$('#tl-1').removeClass('btn-primary btn-info').addClass('btn-primary');
-			if(!$('#tl-0').hasClass('btn-success'))
-				$('#tl-0').removeClass('btn-primary btn-info').addClass('btn-primary');
-			streaming.send({ message: { request: "configure", temporal_layer: 2 }});
-		});
-}
-
-function updateSvcButtons(spatial, temporal) {
-	// Check the spatial layer
-	if(spatial === 0) {
-		toastr.success("Switched SVC spatial layer! (lower resolution)", null, {timeOut: 2000});
-		$('#sl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#sl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-	} else if(spatial === 1) {
-		toastr.success("Switched SVC spatial layer! (normal resolution)", null, {timeOut: 2000});
-		$('#sl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#sl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
 	}
-	// Check the temporal layer
-	if(temporal === 0) {
-		toastr.success("Capped SVC temporal layer! (lowest FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-0').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-	} else if(temporal === 1) {
-		toastr.success("Capped SVC temporal layer! (medium FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-1').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	} else if(temporal === 2) {
-		toastr.success("Capped SVC temporal layer! (highest FPS)", null, {timeOut: 2000});
-		$('#tl-2').removeClass('btn-primary btn-info btn-success').addClass('btn-success');
-		$('#tl-1').removeClass('btn-primary btn-success').addClass('btn-primary');
-		$('#tl-0').removeClass('btn-primary btn-success').addClass('btn-primary');
-	}
+	var escapedValue = value.replace(new RegExp('<', 'g'), '&lt');
+	escapedValue = escapedValue.replace(new RegExp('>', 'g'), '&gt');
+	return escapedValue;
 }
 
 // vim:set ts=2 sw=2 noet:
