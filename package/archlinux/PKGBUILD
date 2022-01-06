@@ -1,0 +1,17 @@
+# Maintainer: Mikhail Gozhev <m@gozhev.ru>
+pkgname=psi
+pkgver=0.0.1
+pkgrel=1
+pkgdesc="A web interface service for home automation"
+arch=('x86_64' 'aarch64')
+url="https://github.com/gozhev/web-psi"
+license=('unknown')
+
+prepare() {
+	ln --force --no-target-directory --symbolic --verbose "../../../." "$pkgname-$pkgver"
+}
+
+package() {
+	cd "$pkgname-$pkgver"
+	make DESTDIR="$pkgdir" PREFIX="/usr" install
+}
