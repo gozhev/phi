@@ -3,6 +3,6 @@ include make.mk/make.mk
 $.go = go build
 
 $(go_binary)
-	name = phi
+	name = psi
 	srcs = main.go
 $;
