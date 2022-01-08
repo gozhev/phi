@@ -1856,7 +1856,7 @@ function Janus(gatewayCallbacks) {
 			Janus.debug(config.pc);
 			if(config.pc.getStats) {	// FIXME
 				config.volume = {};
-				config.bitrate.value = "0 kbits/sec";
+				config.bitrate.value = "0 kbps";
 			}
 			Janus.log("Preparing local SDP and gathering candidates (trickle=" + config.trickle + ")");
 			config.pc.oniceconnectionstatechange = function() {
@@ -3250,7 +3250,7 @@ function Janus(gatewayCallbacks) {
 										var bitRate = Math.round((config.bitrate.bsnow - config.bitrate.bsbefore) * 8 / timePassed);
 										if(Janus.webRTCAdapter.browserDetails.browser === "safari")
 											bitRate = parseInt(bitRate/1000);
-										config.bitrate.value = bitRate + ' kbits/sec';
+										config.bitrate.value = bitRate + ' kbps';
 										//~ Janus.log("Estimated bitrate is " + config.bitrate.value);
 										config.bitrate.bsbefore = config.bitrate.bsnow;
 										config.bitrate.tsbefore = config.bitrate.tsnow;
@@ -3259,7 +3259,7 @@ function Janus(gatewayCallbacks) {
 							});
 						});
 				}, 1000);
-				return "0 kbits/sec";	// We don't have a bitrate value yet
+				return "0 kbps";	// We don't have a bitrate value yet
 			}
 			return config.bitrate.value;
 		} else {

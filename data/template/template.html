@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html xmlns="http://www.w3.org/1999/xhtml">
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -18,21 +17,24 @@
 		<link rel="stylesheet" type="text/css" href="./style/style.css"/>
 		<link rel="shortcut icon" type="image/x-icon" href="./image/favicon.ico"/>
 
-
 		<title>psi | home.gozhev.ru</title>
 	</head>
 	<body>
-		<div id="container">
-			<div id="stream">
-				<video id="remotevideo" playsinline/>
+		<div class="video-layout">
+			<div class="screen">
+				<video id="video" playsinline muted></video>
 			</div>
-			<div id="statusbar">
-				<div id="cur_status">AAA</div>
-				<div id="cur_resolution">AAA</div>
-				<div id="cur_bitrate">AAA</div>
+			<div class="ui">
+				<ul class="infoboard">
+					<li><div id="cur_status">-</div></li>
+					<li><div id="cur_resolution">-</div></li>
+					<li><div id="cur_bitrate">-</div></li>
+				</ul>
+				<ul class="selector" id="streams">
+					<!--li><button>DEFAULT</button></li-->
+				</ul>
 			</div>
 		</div>
 	</body>
 </html>
-
 <!-- vim:set ts=2 sw=2 noet: -->

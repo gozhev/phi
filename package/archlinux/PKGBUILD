@@ -11,6 +11,11 @@ prepare() {
 	ln --force --no-target-directory --symbolic --verbose "../../../." "$pkgname-$pkgver"
 }
 
+build() {
+	cd "$pkgname-$pkgver"
+	make
+}
+
 package() {
 	cd "$pkgname-$pkgver"
 	make DESTDIR="$pkgdir" PREFIX="/usr" install

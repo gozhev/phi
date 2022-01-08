@@ -1,5 +1,9 @@
 include make.mk/make.mk
 
+#GOFLAGS='-ldflags "-s -w"'
+#$.go = go build $(GOFLAGS)
+#unexport GOFLAGS
+
 $.go = go build
 
 $(go_binary)

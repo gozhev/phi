@@ -1,15 +1,15 @@
-var janus = null;
-var streaming = null;
-var bitrateTimer = null;
-var opaqueId = "streamingtest-" + Janus.randomString(12);
-var selectedStream = 1;
+var g_janus = null;
+var g_streaming = null;
+var g_bitrate_timer = null;
+var g_opaque_id = "psi-" + Janus.randomString(12);
+var g_pending_stream_id = null;
 
 $(document).ready(function() {
 	OnDocumentReady();
 });
 
 function OnDocumentReady() {
-  SetupUiInteractions();
+  VideoUiInit();
 	Janus.init({callback: OnJanusInit, debug: "all"});
 }
 
@@ -18,23 +18,38 @@ function OnJanusInit() {
 }
 
 function StopSession() {
-	clearInterval(bitrateTimer);
-	janus.destroy();
+  StreamPropsTimerStop();
+	g_janus.destroy();
 }
 
-function SetupUiInteractions() {
-	var elem = document.getElementById("container");
-	elem.ondblclick = function() {
+function VideoUiHide(layout, hide) {
+	var ui = layout.getElementsByClassName("ui")[0];
+	if (hide) {
+		ui.classList.add("hidden");
+	} else {
+		ui.classList.remove("hidden");
+	}
+}
+
+function VideoUiUpdateStatus(status) {
+	let html_status = document.getElementById("cur_status");
+	html_status.innerText = status;
+}
+
+function VideoUiSetUpFullscreenAction(layout) {
+	var screen = layout.getElementsByClassName("screen")[0];
+	screen.ondblclick = function() {
 		if (!document.fullscreenElement && !document.mozFullScreenElement &&
 				!document.webkitFullscreenElement && !document.msFullscreenElement) {
-			if (elem.requestFullscreen) {
-				elem.requestFullscreen({ navigationUI: "hide" });
-			} else if (elem.msRequestFullscreen) {
-				elem.msRequestFullscreen();
-			} else if (elem.mozRequestFullScreen) {
-				elem.mozRequestFullScreen();
-			} else if (elem.webkitRequestFullscreen) {
-				elem.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+			VideoUiHide(layout, true);
+			if (layout.requestFullscreen) {
+				layout.requestFullscreen({ navigationUI: "hide" });
+			} else if (layout.msRequestFullscreen) {
+				layout.msRequestFullscreen();
+			} else if (layout.mozRequestFullScreen) {
+				layout.mozRequestFullScreen();
+			} else if (layout.webkitRequestFullscreen) {
+				layout.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
 			}
 		} else {
 			if (document.exitFullscreen) {
@@ -46,8 +61,62 @@ function SetupUiInteractions() {
 			} else if (document.webkitExitFullscreen) {
 				document.webkitExitFullscreen();
 			}
+			VideoUiHide(layout, false);
 		}
 	};
+}
+
+function VideoUiInit() {
+	var layout = document.getElementsByClassName("video-layout")[0];
+	VideoUiSetUpFullscreenAction(layout);
+}
+
+
+function UpdateStreamsList() {
+	var body = { request: "list" };
+	Janus.debug("sending message:", body);
+	g_streaming.send({
+		message: body,
+		success: function(result) {
+			if (!result) {
+				Janus.error("error: failed to get available streams");
+				alert("no available streams");
+				return;
+			}
+			var list = result["list"];
+			if (!list) {
+				Janus.error("error: streams list is empty");
+				alert("no available streams");
+				return;
+			}
+			if (!Array.isArray(list)) {
+				Janus.error("error: streams list is not an array");
+				alert("no available streams");
+				return;
+			}
+			Janus.log("got a list of available streams");
+			list.sort(function(a, b) {
+				if(!a || a.id < (b ? b.id : 0)) {
+					return -1;
+				} else if(!b || b.id < (a ? a.id : 0)) {
+					return 1;
+				} else {
+					return 0;
+				}
+			});
+			Janus.debug(list);
+			var html_streams = document.getElementById("streams");
+			for (let i in list) {
+				let button = document.createElement('button');
+				button.innerHTML = list[i]["description"];
+				button.onclick = function() { SwitchStream(list[i]["id"]); };
+				let li = document.createElement('li');
+				li.appendChild(button);
+				html_streams.appendChild(li);
+			}
+			WatchStream(list[0]["id"]);
+		}
+	});
 }
 
 function StartSession() {
@@ -56,92 +125,94 @@ function StartSession() {
 		return;
 	}
 
-	janus = new Janus({
+	g_janus = new Janus({
 		token: token,
 		server: server,
+
 		success: function() {
-			// attach to streaming plugin
-			janus.attach({
+			g_janus.attach({
 				plugin: "janus.plugin.streaming",
-				opaqueId: opaqueId,
+				opaqueId: g_opaque_id,
 
 				success: function(pluginHandle) {
-					$('#details').remove();
-					streaming = pluginHandle;
-
-					Janus.log("Plugin attached! (" + streaming.getPlugin() + ", id=" + streaming.getId() + ")");
-
-					startStream();
+					g_streaming = pluginHandle;
+					Janus.log("plugin attached (" + g_streaming.getPlugin() + ", id=" + g_streaming.getId() + ")");
+					UpdateStreamsList();
 				},
-
 
 				error: function(error) {
-					Janus.error("  -- Error attaching plugin... ", error);
+					Janus.error("error: failed to attach the plugin", error);
 					alert("error: attach plugin: " + error);
 				},
+
 				iceState: function(state) {
 					Janus.log("ICE state changed to " + state);
 				},
+
 				webrtcState: function(on) {
 					Janus.log("Janus says our WebRTC PeerConnection is " + (on ? "up" : "down") + " now");
 				},
+
 				onmessage: function(msg, jsep) {
-					Janus.debug(" ::: got a message :::", msg);
-					var result = msg["result"];
-					if (result) {
-						if (result["status"]) {
-							var status = result["status"];
-							if(status === 'starting')
-								$('#cur_status').text("starting").show();
-							else if(status === 'started')
-								$('#cur_status').text("started").show();
-							else if(status === 'stopped')
-								stopStream();
-						} else if(msg["streaming"] === "event") {
-						}
-					} else if(msg["error"]) {
-						alert(msg["error"]);
-						stopStream();
+					Janus.debug(":::::: got a message ::::::", msg);
+					let error = msg["error"];
+					if (error) {
+					  Janun.error(error);
+						alert(error);
+						StopStream();
 						return;
 					}
 
-					if (jsep) {
-						Janus.debug("Handling SDP as well...", jsep);
-						var stereo = (jsep.sdp.indexOf("stereo=1") !== -1);
-						// Offer from the plugin, let's answer
-						streaming.createAnswer(
-							{
-								jsep: jsep,
-								// We want recvonly audio/video and, if negotiated, datachannels
-								media: { audioSend: false, videoSend: false, data: true },
-								customizeSdp: function(jsep) {
-									if(stereo && jsep.sdp.indexOf("stereo=1") == -1) {
-										// Make sure that our offer contains stereo too
-										jsep.sdp = jsep.sdp.replace("useinbandfec=1", "useinbandfec=1;stereo=1");
-									}
-								},
-								success: function(jsep) {
-									Janus.debug("Got SDP!", jsep);
-									var body = { request: "start" };
-									streaming.send({ message: body, jsep: jsep });
-									$('#watch').html("Stop").removeAttr('disabled').click(stopStream);
-								},
-								error: function(error) {
-									Janus.error("WebRTC error:", error);
-									alert("error: webtrc: " + error.message);
-								}
-							});
+					let result = msg["result"];
+					if (!result) {
+					  Janun.error("error: result is empty");
+						alert("invalid event from the gateway");
+						return;
 					}
 
+					let status = result["status"];
+					if (status) {
+						VideoUiUpdateStatus(status);
+						//if (status == "stopping") {
+						//} else if (status == "stopped") {
+						//	StopStream();
+						//}
+					}
+
+					if (jsep) {
+						Janus.debug("handling sdp", jsep);
+						var stereo = (jsep.sdp.indexOf("stereo=1") !== -1);
+						g_streaming.createAnswer({
+							jsep: jsep,
+
+							// we want recvonly audio/video and, if negotiated, datachannels
+							media: { audioSend: false, videoSend: false, data: true },
+
+							customizeSdp: function(jsep) {
+								if(stereo && jsep.sdp.indexOf("stereo=1") == -1) {
+									// make sure that our offer contains stereo too
+									jsep.sdp = jsep.sdp.replace("useinbandfec=1", "useinbandfec=1;stereo=1");
+								}
+							},
+
+							success: function(jsep) {
+								Janus.debug("got sdp", jsep);
+								var body = { request: "start" };
+								g_streaming.send({ message: body, jsep: jsep });
+							},
+
+							error: function(error) {
+								Janus.error("webrtc error:", error);
+								alert("error: webtrc: " + error.message);
+							}
+						});
+					}
 				},
 
 				onremotestream: function(stream) {
-					Janus.debug("::: got a remote stream :::", stream);
+					Janus.debug("got a remote stream", stream);
 
-
-					$("#remotevideo").bind("playing", function () {
-						$('#waitingvideo').remove();
-
+					$("#video").bind("playing", function () {
 						var videoTracks = stream.getVideoTracks();
 						if(!videoTracks || videoTracks.length === 0)
 							return;
@@ -151,152 +222,101 @@ function StartSession() {
 						if(Janus.webRTCAdapter.browserDetails.browser === "firefox") {
 							// firefox stable has a bug: width and height are not immediately available after a playing
 							setTimeout(function() {
-								var width = $("#remotevideo").get(0).videoWidth;
-								var height = $("#remotevideo").get(0).videoHeight;
+								var width = $("#video").get(0).videoWidth;
+								var height = $("#video").get(0).videoHeight;
 								$('#cur_resolution').text(width+'x'+height).show();
 							}, 2000);
 						}
 					});
 
-					Janus.attachMediaStream($('#remotevideo').get(0), stream);
-					$("#remotevideo").get(0).volume = 0;
-					$("#remotevideo").get(0).play();
+					Janus.attachMediaStream($('#video').get(0), stream);
+					$("#video").get(0).volume = 0;
+					$("#video").get(0).play();
 
 					var videoTracks = stream.getVideoTracks();
 					if(!videoTracks || videoTracks.length === 0) {
-						// No remote video
-						//$('#remotevideo').hide();
-						if($('#stream .no-video-container').length === 0) {
-							$('#stream').append(
-								'<div class="no-video-container">' +
-									'<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
-									'<span class="no-video-text">No remote video available</span>' +
-								'</div>');
-						}
+						var video = document.getElementById("video"); 
+						//video.classList.add("hidden");
+
+						//if($('#screen .no-video-container').length === 0) {
+						//	$('#screen').append(
+						//		'<div class="no-video-container">' +
+						//			'<i class="fa fa-video-camera fa-5 no-video-icon"></i>' +
+						//			'<span class="no-video-text">No remote video available</span>' +
+						//		'</div>');
+						//}
 					} else {
-						$('#stream .no-video-container').remove();
+						//$('#screen .no-video-container').remove();
 					}
-
-					if (videoTracks && videoTracks.length &&
-							(Janus.webRTCAdapter.browserDetails.browser === "chrome" ||
-								Janus.webRTCAdapter.browserDetails.browser === "firefox" ||
-								Janus.webRTCAdapter.browserDetails.browser === "safari")) {
-
-						bitrateTimer = setInterval(function() {
-							var bitrate = streaming.getBitrate();
-							$('#cur_bitrate').text(bitrate);
-							var width = $("#remotevideo").get(0).videoWidth;
-							var height = $("#remotevideo").get(0).videoHeight;
-							if (width > 0 && height > 0) {
-								$('#cur_resolution').text(width+'x'+height).show();
-							}
-						}, 200);
-
+					if (videoTracks && videoTracks.length) {
+						StreamPropsTimerStart();
 					}
 				},
 
 				ondataopen: function(data) {
-					Janus.log("The DataChannel is available!");
-					$('#waitingvideo').remove();
-					$('#stream').append(
-						'<input class="form-control" type="text" id="datarecv" disabled></input>'
-					);
+					Janus.log("the datachannel is available");
 				},
 
 				ondata: function(data) {
-					Janus.debug("We got data from the DataChannel!", data);
-					$('#datarecv').val(data);
+					Janus.debug("we got data from the datachannel", data);
 				},
 
 				oncleanup: function() {
-					Janus.log(" ::: Got a cleanup notification :::");
-					$('#waitingvideo').remove();
-					//$('#remotevideo').remove();
-					$('#datarecv').remove();
-					$('.no-video-container').remove();
-					$('#bitrate').attr('disabled', true);
-					$('#bitrateset').html('Bandwidth<span class="caret"></span>');
-					if(bitrateTimer)
-						clearInterval(bitrateTimer);
-					bitrateTimer = null;
-					$('#metadata').empty();
-					$('#info').addClass('hide').hide();
+					Janus.log("got a cleanup notification");
+					StreamPropsTimerStop();
+					if (g_pending_stream_id) {
+						WatchStream(g_pending_stream_id);
+						g_pending_stream_id = null;
+						return;
+					}
 				}
-
 			});
 		},
+
 		error: function(error) {
 			Janus.error(error);
-			alert(error, function() {
-				//window.location.reload();
-			});
+			alert(error);
 		},
-		destroyed: function() {
-			//window.location.reload();
-		}
+
+		destroyed: function() {}
 	});
 }
 
-function startStream() {
-	Janus.log("selected stream: " + selectedStream);
-	if(!selectedStream) {
-		alert("error: no stream selected");
-		return;
-	}
-
-	var body = { request: "watch", id: selectedStream };
-	streaming.send({ message: body });
-	// no remote video yet
-	$('#stream').append('<video class="rounded centered" id="waitingvideo" width="100%" height="100%" />');
-
-	// get some more info for the mountpoint to display, if any
-	getStreamInfo();
+function SwitchStream(id) {
+	g_pending_stream_id = id;
+	StopStream();
 }
 
-function stopStream() {
+function WatchStream(id) {
+  Janus.log("watch stream: " + id);
+	var body = { request: "watch", id: id };
+	g_streaming.send({ message: body });
+}
+
+function StopStream() {
 	var body = { request: "stop" };
-	streaming.send({ message: body });
-	streaming.hangup();
-	//$('#cur_status').empty();
-	//$('#cur_bitrate').empty();
-	//$('#cur_resolution').empty();
-	if (bitrateTimer) {
-		clearInterval(bitrateTimer);
-	}
-	bitrateTimer = null;
+	g_streaming.send({ message: body });
+	g_streaming.hangup();
+	StreamPropsTimerStop();
 }
 
-function getStreamInfo() {
-	$('#metadata').empty();
-
-	if (!selectedStream) {
-		return;
+function StreamPropsTimerStop() {
+	if (g_bitrate_timer) {
+		clearInterval(g_bitrate_timer);
 	}
+	g_bitrate_timer = null;
+}
 
-	// send a request for more info on the mountpoint we subscribed to
-	var body = {
-		request: "info",
-		id: parseInt(selectedStream) || selectedStream
-	};
-	streaming.send({
-		message: body,
-		success: function(result) {
-			if (result && result.info && result.info.metadata) {
-				$('#metadata').html(escapeXmlTags(result.info.metadata));
-				$('#info').removeClass('hide').show();
-			}
+function StreamPropsTimerStart() {
+	g_bitrate_timer = setInterval(function() {
+		var bitrate = g_streaming.getBitrate();
+		$('#cur_bitrate').text(bitrate);
+		var width = $("#video").get(0).videoWidth;
+		var height = $("#video").get(0).videoHeight;
+		if (width > 0 && height > 0) {
+			$('#cur_resolution').text(width+'x'+height).show();
 		}
-	});
-}
-
-// helper to escape xml tags
-function escapeXmlTags(value) {
-	if(!value) {
-		return;
-	}
-	var escapedValue = value.replace(new RegExp('<', 'g'), '&lt');
-	escapedValue = escapedValue.replace(new RegExp('>', 'g'), '&gt');
-	return escapedValue;
+	}, 500);
 }
 
 // vim:set ts=2 sw=2 noet:
