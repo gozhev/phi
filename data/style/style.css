@@ -116,6 +116,10 @@ body {
 	margin-right: auto;
 }
 
+.video-layout .screen video::-webkit-media-controls {
+	display:none !important;
+}
+
 .hidden {
 	display: none !important;
 }

@@ -9,7 +9,7 @@ $(document).ready(function() {
 });
 
 function OnDocumentReady() {
-  VideoUiInit();
+  VideoLayoutInit();
 	Janus.init({callback: OnJanusInit, debug: "all"});
 }
 
@@ -22,36 +22,26 @@ function StopSession() {
 	g_janus.destroy();
 }
 
-function VideoUiHide(layout, hide) {
+function VideoLayoutControlsVisible(layout, visible) {
 	var ui = layout.getElementsByClassName("ui")[0];
-	if (hide) {
+	if (!visible) {
 		ui.classList.add("hidden");
 	} else {
 		ui.classList.remove("hidden");
 	}
 }
 
-function VideoUiUpdateStatus(status) {
+function VideoLayoutUpdateStatus(status) {
 	let html_status = document.getElementById("cur_status");
 	html_status.innerText = status;
 }
 
-function VideoUiSetUpFullscreenAction(layout) {
+function VideoLayoutSetUpFullscreenAction(layout) {
 	var screen = layout.getElementsByClassName("screen")[0];
-	screen.ondblclick = function() {
-		if (!document.fullscreenElement && !document.mozFullScreenElement &&
-				!document.webkitFullscreenElement && !document.msFullscreenElement) {
-			VideoUiHide(layout, true);
-			if (layout.requestFullscreen) {
-				layout.requestFullscreen({ navigationUI: "hide" });
-			} else if (layout.msRequestFullscreen) {
-				layout.msRequestFullscreen();
-			} else if (layout.mozRequestFullScreen) {
-				layout.mozRequestFullScreen();
-			} else if (layout.webkitRequestFullscreen) {
-				layout.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
-			}
-		} else {
+	var video = screen.getElementsByTagName("video")[0];
+	screen.ondblclick = function () {
+		if (document.fullscreenElement || document.mozFullScreenElement ||
+				document.webkitFullscreenElement || document.msFullscreenElement) {
 			if (document.exitFullscreen) {
 				document.exitFullscreen();
 			} else if (document.msExitFullscreen) {
@@ -61,14 +51,23 @@ function VideoUiSetUpFullscreenAction(layout) {
 			} else if (document.webkitExitFullscreen) {
 				document.webkitExitFullscreen();
 			}
-			VideoUiHide(layout, false);
+		} else {
+			if (video.requestFullscreen) {
+				video.requestFullscreen({ navigationUI: "hide" });
+			} else if (video.msRequestFullscreen) {
+				video.msRequestFullscreen();
+			} else if (video.mozRequestFullScreen) {
+				video.mozRequestFullScreen();
+			} else if (video.webkitRequestFullscreen) {
+				video.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+			}
 		}
 	};
 }
 
-function VideoUiInit() {
+function VideoLayoutInit() {
 	var layout = document.getElementsByClassName("video-layout")[0];
-	VideoUiSetUpFullscreenAction(layout);
+	VideoLayoutSetUpFullscreenAction(layout);
 }
 
 
@@ -172,7 +171,7 @@ function StartSession() {
 
 					let status = result["status"];
 					if (status) {
-						VideoUiUpdateStatus(status);
+						VideoLayoutUpdateStatus(status);
 						//if (status == "stopping") {
 						//} else if (status == "stopped") {
 						//	StopStream();
